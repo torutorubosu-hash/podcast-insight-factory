@@ -5,7 +5,7 @@ import edge_tts
 import asyncio
 import os
 
-# --- 1. ตั้งค่าหน้าตาแอป (Minimalist Notebook Style) ---
+# --- 1. ตั้งค่าหน้าตาแอป ---
 st.set_page_config(page_title="Minimalist Insight", page_icon="📖", layout="centered")
 
 st.markdown("""
@@ -20,114 +20,82 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. ฟังก์ชันเสริม (Helpers) ---
-
+# --- 2. ฟังก์ชันเสริม ---
 def extract_text_from_file(uploaded_file):
-    """ดึงข้อความจากไฟล์ PDF หรือ TXT"""
     text = ""
-    if uploaded_file.type == "application/pdf":
-        with pdfplumber.open(uploaded_file) as pdf:
-            for page in pdf.pages:
-                content = page.extract_text()
-                if content:
-                    text += content
-    else:
-        text = str(uploaded_file.read(), "utf-8")
+    try:
+        if uploaded_file.type == "application/pdf":
+            with pdfplumber.open(uploaded_file) as pdf:
+                for page in pdf.pages:
+                    content = page.extract_text()
+                    if content: text += content
+        else:
+            text = str(uploaded_file.read(), "utf-8")
+    except Exception as e:
+        st.error(f"อ่านไฟล์ไม่ได้: {e}")
     return text
 
 async def text_to_speech(text, output_filename="podcast_audio.mp3"):
-    """แปลงข้อความเป็นเสียงพอดแคสต์"""
     communicate = edge_tts.Communicate(text, "th-TH-PremwadeeNeural")
     await communicate.save(output_filename)
 
 # --- 3. ส่วนหลักของแอป ---
-
 st.title("Reflective Storyteller 📖")
 st.subheader("เปลี่ยนหน้ากระดาษให้เป็นเสียงนำทางใจ")
 
-# ดึง API Key จาก Streamlit Secrets
+# ดึง API Key จาก Secrets
 api_key = st.secrets.get("GEMINI_API_KEY")
 
-# ช่องอัปโหลดไฟล์
 uploaded_file = st.file_uploader("ลากไฟล์หนังสือของคุณมาวางที่นี่ (PDF หรือ TXT)", type=["pdf", "txt"])
 
 if uploaded_file is not None:
-    st.info(f"📁 รับไฟล์: {uploaded_file.name} เรียบร้อยแล้ว")
-    
     if st.button("เริ่มการตกผลึกความคิด ✨"):
         if not api_key:
-            st.error("❌ ไม่พบ API Key! กรุณาไปที่ Settings > Secrets แล้วใส่ GEMINI_API_KEY ก่อนครับ")
+            st.error("❌ ไม่พบ API Key ใน Secrets")
         else:
             try:
                 # ตั้งค่า Gemini
                 genai.configure(api_key=api_key)
                 
-                with st.status("🚀 กำลังสร้างพอดแคสต์...", expanded=True) as status:
+                with st.status("🚀 กำลังดำเนินการ...", expanded=True) as status:
                     # ขั้นตอนที่ 1: อ่านเนื้อหา
-                    st.write("📖 กำลังอ่านเนื้อหาจากไฟล์...")
                     raw_text = extract_text_from_file(uploaded_file)
-                    
                     if not raw_text.strip():
-                        st.error("ไม่สามารถอ่านข้อความจากไฟล์ได้ กรุณาลองไฟล์อื่นครับ")
+                        st.error("ไฟล์ว่างเปล่าครับ")
                         st.stop()
 
-                    # ขั้นตอนที่ 2: สรุปด้วย AI (นิยาม prompt ไว้ตรงนี้เลย)
+                    # ขั้นตอนที่ 2: สรุปด้วย AI
                     st.write("🧠 AI กำลังกลั่นกรองหัวใจสำคัญ...")
-                    prompt_text = f"""
-                    คุณคือนักเล่าเรื่องที่อบอุ่นและช่างสังเกต
-                    จงสรุปเนื้อหาที่ได้รับ ให้เป็นบทพอดแคสต์ที่มีรายละเอียดและการยกตัวอย่างให้เชื่อมโยงกับชีวิตจริง
-                    โทน: นุ่มนวล, ให้กำลังใจ, มีความหวัง, เชื่อมโยงเรื่องราวเข้ากับชีวิตจริง
-                    เนื้อหา: {raw_text[:10000]}
-                    (สรุปเป็นภาษาไทยที่ไพเราะ เริ่มต้นด้วยการทักทายที่ทำให้คนฟังรู้สึกสบายใจ)
-                    """
+                    prompt_text = f"คุณคือ Agent สรุปเนื้อหานี้ให้เป็นพอดแคสต์ที่อบอุ่น: {raw_text[:8000]}"
                     
-                
-try:
-    # 1. นิยาม prompt
-    prompt_text = f"คุณคือAgentสรุปเนื้อหานี้ให้เป็นพอดแคสต์ที่อบอุ่น: {raw_text[:8000]}"
-    
-    # 2. เรียกใช้โมเดล (ลองใส่ 'models/' นำหน้าชื่อ)
-    # เราจะลองเรียก Flash ก่อน ถ้าไม่ได้ค่อยถอยไป Pro
-    try:
-        model = genai.GenerativeModel(model_name='models/gemini-1.5-flash') # <--- ใส่ models/ นำหน้า
-        response = model.generate_content(prompt_text)
-    except:
-        model = genai.GenerativeModel(model_name='models/gemini-pro') # <--- ใส่ models/ นำหน้า
-        response = model.generate_content(prompt_text)
-        
-    final_script = response.text
+                    # ลองเรียก Flash ก่อน ถ้าไม่ได้จะสลับไป Pro (แก้ปัญหา 404)
+                    try:
+                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        response = model.generate_content(prompt_text)
+                    except:
+                        try:
+                            model = genai.GenerativeModel('gemini-pro')
+                            response = model.generate_content(prompt_text)
+                        except Exception as ai_err:
+                            st.error(f"AI ทำงานไม่ได้: {ai_err}")
+                            st.stop()
+                    
+                    final_script = response.text
                     
                     # ขั้นตอนที่ 3: ทำเสียง
                     st.write("🔊 กำลังบันทึกเสียงพอดแคสต์...")
                     asyncio.run(text_to_speech(final_script))
-                    
-                    status.update(label="✨ ตกผลึกเสร็จสิ้น!", state="complete")
+                    status.update(label="✨ เสร็จสมบูรณ์!", state="complete")
 
-                # --- การแสดงผลผลลัพธ์ ---
-                st.markdown(f"""
-                <div class="notebook-container">
-                    <div class="quote-text">{final_script}</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
+                # แสดงผล
+                st.markdown(f'<div class="notebook-container"><div class="quote-text">{final_script}</div></div>', unsafe_allow_html=True)
                 st.audio("podcast_audio.mp3")
-                st.download_button(
-                    label="💾 ดาวน์โหลดเสียงพอดแคสต์",
-                    data=open("podcast_audio.mp3", "rb"),
-                    file_name=f"Insight_{uploaded_file.name.split('.')[0]}.mp3",
-                    mime="audio/mp3"
-                )
-
+                
             except Exception as e:
-                st.error(f"เกิดข้อผิดพลาด: {e}")
+                st.error(f"เกิดข้อผิดพลาดภาพรวม: {e}")
 
 else:
-    st.markdown("""
-    <div style='text-align: center; padding: 100px 20px; color: #BBB; border: 1px dashed #DDD; border-radius: 20px;'>
-        <p style='font-size: 18px;'>เริ่มต้นความละเมียดละไม</p>
-        <p style='font-size: 14px;'>โดยการลากไฟล์ที่ต้องการสรุปมาวางด้านบนครับ</p>
-    </div>
-    """, unsafe_allow_html=True)
+    st.info("กรุณาลากไฟล์มาวางเพื่อเริ่มงานครับ")
 
 st.markdown("---")
 st.caption("“Minimalist Insight” - พัฒนาแอปโดยคุณ Jabu")
