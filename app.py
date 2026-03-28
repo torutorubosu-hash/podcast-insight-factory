@@ -1,3 +1,12 @@
+import streamlit as st 
+import os
+import google.generativeai as genai
+
+if "GEMINI_API_KEY" in st.secrets:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+else:
+    st.error("กรุณาตั้งค่า GEMINI_API_KEY ในหน้า Secrets ก่อนครับ")
+
 import google.generativeai as genai
 
 # --- ตั้งค่า API Key (นอกฟังก์ชัน) ---
