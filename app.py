@@ -1,9 +1,10 @@
 import streamlit as st
 from google import genai
+from google.genai import types # <--- เพิ่มการ import ตัวนี้เข้ามาครับ
 import pdfplumber
 import os
 
-# --- 1. หน้าตาแอป (Minimalist Notebook) ---
+# --- 1. หน้าตาแอป (The Quiet Lens Style) ---
 st.set_page_config(page_title="The Quiet Lens", page_icon="📖", layout="centered")
 
 st.markdown("""
@@ -30,83 +31,63 @@ def extract_text(uploaded_file):
         text = str(uploaded_file.read(), "utf-8")
     return text
 
-# --- 3. Sidebar (API Key & Debug) ---
+# --- 3. Sidebar ---
 with st.sidebar:
     st.markdown("### 🔑 ตั้งค่าระบบ")
-    # ช่องกรอก Key
     api_key = st.text_input("กรอก Gemini API Key:", type="password")
     
-    # ดึงรายชื่อโมเดลมาโชว์เพื่อความมั่นใจ
-    if st.button("🔍 ตรวจสอบโมเดล"):
-        if api_key:
-            try:
-                client = genai.Client(api_key=api_key)
-                models = [m.name for m in client.models.list()]
-                st.success("เชื่อมต่อสำเร็จ!")
-                st.write("โมเดลที่คุณใช้ได้:")
-                # แสดงแค่โมเดลที่เราจะใช้เพื่อความง่าย
-                st.write([m for m in models if "native-audio" in m or "gemini-2.5-flash" == m.replace("models/","")])
-            except Exception as e:
-                st.error(f"กุญแจมีปัญหา: {e}")
-        else:
-            st.warning("กรุณากรอก API Key ก่อนครับ")
-
-# --- 4. หน้าหลัก (Main Stage) ---
+# --- 4. หน้าหลัก ---
 st.title("The Quiet Lens 📖")
 st.subheader("เลนส์ที่เงียบสงบ ที่จะช่วยให้คุณมองโลกอย่างลึกซึ้ง")
 
-uploaded_file = st.file_uploader("ลากไฟล์ PDF/TXT ที่ต้องการสรุปมาวางที่นี่", type=["pdf", "txt"])
+uploaded_file = st.file_uploader("ลากไฟล์ PDF/TXT มาวางที่นี่", type=["pdf", "txt"])
 
 if uploaded_file and api_key:
     if st.button("เริ่มการตกผลึกความคิด ✨"):
         try:
             client = genai.Client(api_key=api_key)
             
-            with st.status("🚀 กำลังทำงาน...", expanded=True) as status:
+            with st.status("🚀 กำลังกลั่นกรองเสียงแห่งปัญญา...", expanded=True) as status:
                 st.write("📖 อ่านเนื้อหา...")
                 raw_text = extract_text(uploaded_file)
                 
-                st.write("🧠 AI สรุปและสร้างเสียงพอดแคสต์...")
-                # นิยาม Persona และคำสั่งใหม่ให้เข้ากับชื่อแอป
+                st.write("🧠 The Quiet Lens กำลังวิเคราะห์...")
                 prompt = f"""
-                คุณคือ 'The Quiet Lens' นักจัดพอดแคสต์ที่นุ่มนวลและช่างสังเกต
-                จงสรุปเนื้อหาที่ได้รับ ให้เป็นบทพอดแคสต์ที่มีรายละเอียด อาจยกตัวอย่างให้เข้ากับชีวิตจริงของคนในยุคปัจจุบัน
-                โทน: เงียบสงบ, นุ่มนวล, ให้กำลังใจ, เชื่อมโยงเรื่องราวเข้ากับชีวิตจริงอย่างลึกซึ้ง
+                คุณคือ 'The Quiet Lens' นักเล่าเรื่องที่นุ่มนวล
+                สรุปเนื้อหานี้ให้เป็นบทพอดแคสต์ที่อบอุ่นและลึกซึ้ง 1-2 นาที
+                เน้นการตั้งคำถามให้คนฟังได้คิดตาม และใช้ภาษาไทยที่สวยงาม
                 เนื้อหา: {raw_text[:12000]}
-                (สรุปเป็นภาษาไทยที่ไพเราะ เริ่มต้นด้วยการทักทายที่ทำให้คนฟังรู้สึกสบายใจ)
                 """
                 
-                # เรียกโมเดล Gemini Native Audio (โมเดลจะสังเคราะห์เสียงออกมาเองโดยตรง)
+                # --- แก้ไขโครงสร้าง Config ตรงนี้ครับ ---
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash-native-audio-latest', # ใช้ตัวที่อยู่ในลิสต์ของคุณ
+                    model='gemini-2.5-flash-native-audio-latest',
                     contents=prompt,
-                    config={
-                        "speech_config": {
-                            # ลองชื่อเสียง Aoede (ผู้หญิง) หรือ Puck (ผู้ชาย) ดูนะครับ
-                            "voice_config": {"predefined_voice": "Puck"}
-                        }
-                    }
+                    config=types.GenerateContentConfig(
+                        speech_config=types.SpeechConfig(
+                            voice_config=types.VoiceConfig(
+                                predefined_voice=types.PredefinedVoiceConfig(
+                                    voice_name='Puck' # หรือ 'Aoede' สำหรับเสียงผู้หญิงที่นุ่มนวล
+                                )
+                            )
+                        )
+                    )
                 )
                 
                 final_script = response.text
                 
-                st.write("🔊 กำลังบันทึกไฟล์เสียง...")
-                # บันทึกเสียงที่ได้จาก AI โดยตรงเป็นไฟล์ mp3
-                with open("quiet_lens_podcast.mp3", "wb") as f:
+                st.write("🔊 กำลังบันทึกพอดแคสต์...")
+                with open("quiet_lens.mp3", "wb") as f:
                     f.write(response.audio_bytes)
                     
-                status.update(label="ตกผลึกเสร็จสมบูรณ์!", state="complete")
+                status.update(label="ตกผลึกเรียบร้อย!", state="complete")
 
-            # --- การแสดงผลผลลัพธ์ ---
+            # แสดงผล
             st.markdown(f'<div class="notebook-container"><div class="quote-text">{final_script}</div></div>', unsafe_allow_html=True)
-            
-            # เล่นเสียงที่ AI สร้างออกมาเองโดยตรง (จะมีความธรรมชาติสูงมาก)
-            st.audio("quiet_lens_podcast.mp3")
+            st.audio("quiet_lens.mp3")
             
         except Exception as e:
             st.error(f"เกิดข้อผิดพลาด: {e}")
-            if "404" in str(e):
-                st.warning("ดูเหมือน API Key ของคุณยังไม่ได้รับสิทธิ์ให้ใช้โมเดล Native Audio ในโปรเจกต์นี้ครับ ลองสร้าง API Key ใหม่ในโปรเจกต์ใหม่ดูนะครับ")
 
 elif not api_key:
-    st.info("เริ่มต้นโดยการกรอก API Key ที่แถบด้านข้างเพื่อเปิดใช้งานระบบครับ")
+    st.info("กรุณากรอก API Key เพื่อเริ่มต้นการเดินทางครับ")
