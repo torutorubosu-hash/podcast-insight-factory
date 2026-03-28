@@ -1,14 +1,14 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 import pdfplumber
 import edge_tts
 import asyncio
 import os
 
-# --- 1. หน้าตาแอป (Adaptive Minimalist) ---
+# --- 1. ตั้งค่าหน้าตาแอป (Adaptive Minimalist) ---
 st.set_page_config(page_title="The Quiet Lens", page_icon="📖", layout="centered")
 
-# CSS ที่รองรับทั้ง Dark และ Light Theme อัตโนมัติ
+# CSS ที่ดึงค่าจาก Theme ของเครื่องผู้ใช้ (รองรับ Dark/Light Mode)
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500&display=swap');
@@ -20,7 +20,7 @@ st.markdown("""
         border: 1px solid var(--divider-color);
         border-radius: 12px;
         margin-top: 20px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
     }
     .quote-text {
         font-size: 18px;
@@ -30,16 +30,18 @@ st.markdown("""
         white-space: pre-wrap;
     }
     .stButton>button {
-        border-radius: 20px;
+        border-radius: 25px;
+        padding: 10px 20px;
         border: 1px solid var(--primary-color);
         background-color: transparent;
         color: var(--text-color);
         width: 100%;
-        transition: 0.3s;
+        transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .stButton>button:hover {
         background-color: var(--primary-color) !important;
         color: white !important;
+        transform: translateY(-2px);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -49,71 +51,93 @@ def extract_text(uploaded_file):
     text = ""
     if uploaded_file.type == "application/pdf":
         with pdfplumber.open(uploaded_file) as pdf:
-            for page in pdf.pages:
-                content = page.extract_text()
-                if content: text += content
+            text = "".join(page.extract_text() for page in pdf.pages if page.extract_text())
     else:
         text = str(uploaded_file.read(), "utf-8")
     return text
 
 async def text_to_speech(text):
-    # ใช้เสียงคุณ Niwat ซึ่งนุ่มนวลและเป็นธรรมชาติมากสำหรับพอดแคสต์ไทย
+    # ใช้เสียง Niwat ที่นุ่มนวลและเป็นธรรมชาติที่สุดสำหรับภาษาไทย
     communicate = edge_tts.Communicate(text, "th-TH-NiwatNeural")
     await communicate.save("podcast.mp3")
 
-# --- 3. ส่วนตั้งค่าด้านข้าง (Sidebar) ---
-with st.sidebar:
-    st.title("⚙️ การตั้งค่า")
-    api_key = st.text_input("กรอก Gemini API Key:", type="password")
-    st.info("💡 ใช้โมเดล: gemini-2.0-flash (เสถียรที่สุด)")
+# --- 3. ระบบ Smart Model Selector ---
+def get_best_model(client):
+    """ฟังก์ชันเลือกโมเดลที่ดีที่สุดจากสิทธิ์ที่ API Key มี"""
+    # ลำดับความเก่งที่เราอยากได้ (จากมากไปน้อย)
+    priority_list = [
+        'models/gemini-2.5-flash',
+        'models/gemini-2.0-flash',
+        'models/gemini-1.5-flash',
+        'models/gemini-pro'
+    ]
+    try:
+        available_models = [m.name for m in client.models.list()]
+        # เลือกตัวแรกที่เจอใน priority_list และมีอยู่ในเครื่องจริง
+        for model_name in priority_list:
+            if model_name in available_models:
+                return model_name
+    except:
+        pass
+    return 'models/gemini-2.0-flash' # ค่าเริ่มต้นกรณีเช็คไม่ได้
 
-# --- 4. หน้าหลัก ---
+# --- 4. Sidebar & หน้าหลัก ---
+with st.sidebar:
+    st.title("⚙️ System Configuration")
+    api_key = st.text_input("กรอก Gemini API Key:", type="password")
+    st.divider()
+    st.caption("แอปจะเลือกโมเดลที่ดีที่สุดให้คุณอัตโนมัติ")
+
 st.title("The Quiet Lens 📖")
 st.subheader("เลนส์ที่เงียบสงบ ที่จะช่วยให้คุณมองโลกอย่างลึกซึ้ง")
 
-file = st.file_uploader("ลากไฟล์ PDF หรือ TXT มาวางที่นี่", type=["pdf", "txt"])
+file = st.file_uploader("ลากไฟล์ PDF หรือ TXT ของคุณมาวางที่นี่", type=["pdf", "txt"])
 
 if file and api_key:
     if st.button("เริ่มการตกผลึกความคิด ✨"):
         try:
-            # ตั้งค่า API
-            genai.configure(api_key=api_key)
+            client = genai.Client(api_key=api_key)
             
-            with st.status("🚀 กำลังเดินทางเข้าสู่โลกแห่งปัญญา...", expanded=True) as status:
-                # 1. อ่านไฟล์
-                st.write("📖 อ่านเนื้อหาจากหน้ากระดาษ...")
+            with st.status("🚀 กำลังคัดสรรเทคโนโลยีที่ดีที่สุด...", expanded=True) as status:
+                # 1. เลือกโมเดลที่ใช้งานได้จริง
+                best_model = get_best_model(client)
+                st.write(f"✅ เลือกใช้โมเดล: `{best_model}`")
+                
+                # 2. อ่านไฟล์
                 raw_text = extract_text(file)
                 
-                # 2. สรุปด้วย AI (ใช้รุ่น 2.0-flash ที่อยู่ในลิสต์ของคุณและเสถียรกว่า)
-                st.write("🧠 The Quiet Lens กำลังตกผลึกความคิด...")
+                # 3. สั่ง AI สรุปเนื้อหา
+                st.write("🧠 The Quiet Lens กำลังตกผลึกเนื้อหา...")
                 prompt = f"""
-                คุณคือ 'The Quiet Lens' นักจัดพอดแคสต์ที่นุ่มนวลและช่างสังเกต
-                จงสรุปเนื้อหาที่ได้รับ ให้เป็นบทพอดแคสต์ที่อบอุ่นและลึกซึ้ง มีรายละเอียดและการยกตัวอย่างให้เข้ากับชีวิตยุคใหม่
-                เน้นการเล่าเรื่องที่ทำให้คนฟังรู้สึกสงบและได้แง่คิดในการใช้ชีวิต
-                เนื้อหา: {raw_text[:10000]}
+                คุณคือ 'The Quiet Lens' นักจัดพอดแคสต์ที่นุ่มนวลและสุขุม
+                จงสรุปเนื้อหาที่ได้รับ ให้เป็นบทพอดแคสต์ที่อบอุ่นและลึกซึ้ง 1-2 นาที
+                เน้นการเล่าเรื่องที่ทำให้คนฟังรู้สึกสงบและได้แง่คิดลึกซึ้ง
+                เนื้อหา: {raw_text[:12000]}
                 (สรุปเป็นภาษาไทยที่ไพเราะ เริ่มต้นด้วยการทักทายที่อบอุ่น)
                 """
                 
-                model = genai.GenerativeModel('gemini-2.0-flash')
-                response = model.generate_content(prompt)
+                response = client.models.generate_content(
+                    model=best_model.replace("models/", ""), # ตัด models/ ออกถ้าใช้ SDK ใหม่
+                    contents=prompt
+                )
                 final_script = response.text
                 
-                # 3. สร้างเสียง (ใช้ edge-tts ที่เสถียรกว่าในตอนนี้)
-                st.write("🔊 กำลังบันทึกเสียงพอดแคสต์...")
+                # 4. สร้างเสียงพอดแคสต์
+                st.write("🔊 กำลังบันทึกเสียงแห่งความเงียบสงบ...")
                 asyncio.run(text_to_speech(final_script))
                 
-                status.update(label="การตกผลึกเสร็จสิ้น!", state="complete")
+                status.update(label="การตกผลึกเสร็จสมบูรณ์!", state="complete")
 
-            # --- แสดงผลลัพธ์ ---
+            # --- ผลลัพธ์ ---
             st.markdown(f'<div class="notebook-container"><div class="quote-text">{final_script}</div></div>', unsafe_allow_html=True)
             st.audio("podcast.mp3")
-            st.download_button("💾 ดาวน์โหลดพอดแคสต์", open("podcast.mp3", "rb"), file_name="quiet_lens.mp3")
+            st.download_button("💾 เก็บพอดแคสต์นี้ไว้ฟัง", open("podcast.mp3", "rb"), file_name="the_quiet_lens.mp3")
 
         except Exception as e:
             st.error(f"เกิดข้อผิดพลาด: {e}")
 
 elif not api_key:
-    st.warning("⚠️ กรุณากรอก API Key ที่แถบด้านข้างก่อนเริ่มต้นครับ")
+    st.info("💡 กรุณากรอก API Key ที่แถบด้านข้างเพื่อเปิดใช้งานเลนส์แห่งปัญญาครับ")
 
 st.divider()
-st.caption("The Quiet Lens | พัฒนาโดยคุณ Jabu")
+st.caption("The Quiet Lens | Adaptive & Smart Podcast Generator")
