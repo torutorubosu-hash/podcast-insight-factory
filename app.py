@@ -1,12 +1,10 @@
 import streamlit as st
-from google import genai  # ใช้ SDK ตัวใหม่ล่าสุด
+from google import genai
 import pdfplumber
-import edge_tts
-import asyncio
 import os
 
-# --- 1. หน้าตาแอป (Minimalist) ---
-st.set_page_config(page_title="Minimalist Insight", page_icon="📖", layout="centered")
+# --- 1. หน้าตาแอป (Minimalist Notebook) ---
+st.set_page_config(page_title="The Quiet Lens", page_icon="📖", layout="centered")
 
 st.markdown("""
 <style>
@@ -32,61 +30,83 @@ def extract_text(uploaded_file):
         text = str(uploaded_file.read(), "utf-8")
     return text
 
-async def make_audio(text):
-    communicate = edge_tts.Communicate(text, "th-TH-PremwadeeNeural")
-    await communicate.save("podcast.mp3")
-
 # --- 3. Sidebar (API Key & Debug) ---
 with st.sidebar:
     st.markdown("### 🔑 ตั้งค่าระบบ")
+    # ช่องกรอก Key
     api_key = st.text_input("กรอก Gemini API Key:", type="password")
     
-    if st.button("🔍 ตรวจสอบการเชื่อมต่อ"):
+    # ดึงรายชื่อโมเดลมาโชว์เพื่อความมั่นใจ
+    if st.button("🔍 ตรวจสอบโมเดล"):
         if api_key:
             try:
                 client = genai.Client(api_key=api_key)
-                # ลองดึงชื่อโมเดลที่กุญแจนี้เห็น
                 models = [m.name for m in client.models.list()]
                 st.success("เชื่อมต่อสำเร็จ!")
-                st.write("โมเดลที่กุญแจคุณใช้ได้:")
-                st.write(models)
+                st.write("โมเดลที่คุณใช้ได้:")
+                # แสดงแค่โมเดลที่เราจะใช้เพื่อความง่าย
+                st.write([m for m in models if "native-audio" in m or "gemini-2.5-flash" == m.replace("models/","")])
             except Exception as e:
                 st.error(f"กุญแจมีปัญหา: {e}")
         else:
             st.warning("กรุณากรอก API Key ก่อนครับ")
 
-# --- 4. หน้าหลัก ---
-st.title("Reflective Storyteller 📖")
-st.subheader("เปลี่ยนหน้ากระดาษให้เป็นเสียงนำทางใจ")
+# --- 4. หน้าหลัก (Main Stage) ---
+st.title("The Quiet Lens 📖")
+st.subheader("เลนส์ที่เงียบสงบ ที่จะช่วยให้คุณมองโลกอย่างลึกซึ้ง")
 
-file = st.file_uploader("ลากไฟล์ PDF/TXT มาวางที่นี่", type=["pdf", "txt"])
+uploaded_file = st.file_uploader("ลากไฟล์ PDF/TXT ที่ต้องการสรุปมาวางที่นี่", type=["pdf", "txt"])
 
-if file and api_key:
+if uploaded_file and api_key:
     if st.button("เริ่มการตกผลึกความคิด ✨"):
         try:
             client = genai.Client(api_key=api_key)
             
-            with st.status("🚀 กำลังดำเนินการ...", expanded=True) as status:
-                st.write("📖 อ่านไฟล์...")
-                raw_content = extract_text(file)
+            with st.status("🚀 กำลังทำงาน...", expanded=True) as status:
+                st.write("📖 อ่านเนื้อหา...")
+                raw_text = extract_text(uploaded_file)
                 
-                st.write("🧠 AI สรุปเนื้อหา...")
-                prompt = f"คุณคือ 'Niwgom Agent' สรุปเนื้อหานี้ให้เป็นพอดแคสต์ที่อบอุ่น: {raw_content[:10000]}"
+                st.write("🧠 AI สรุปและสร้างเสียงพอดแคสต์...")
+                # นิยาม Persona และคำสั่งใหม่ให้เข้ากับชื่อแอป
+                prompt = f"""
+                คุณคือ 'The Quiet Lens' นักจัดพอดแคสต์ที่นุ่มนวลและช่างสังเกต
+                จงสรุปเนื้อหาที่ได้รับ ให้เป็นบทพอดแคสต์ที่มีรายละเอียด อาจยกตัวอย่างให้เข้ากับชีวิตจริงของคนในยุคปัจจุบัน
+                โทน: เงียบสงบ, นุ่มนวล, ให้กำลังใจ, เชื่อมโยงเรื่องราวเข้ากับชีวิตจริงอย่างลึกซึ้ง
+                เนื้อหา: {raw_text[:12000]}
+                (สรุปเป็นภาษาไทยที่ไพเราะ เริ่มต้นด้วยการทักทายที่ทำให้คนฟังรู้สึกสบายใจ)
+                """
                 
-                # เรียกใช้โมเดลผ่าน SDK ใหม่ (ระบุชื่อสั้นๆ ได้เลย)
+                # เรียกโมเดล Gemini Native Audio (โมเดลจะสังเคราะห์เสียงออกมาเองโดยตรง)
                 response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=prompt
+                    model='gemini-2.5-flash-native-audio-latest', # ใช้ตัวที่อยู่ในลิสต์ของคุณ
+                    contents=prompt,
+                    config={
+                        "speech_config": {
+                            # ลองชื่อเสียง Aoede (ผู้หญิง) หรือ Puck (ผู้ชาย) ดูนะครับ
+                            "voice_config": {"predefined_voice": "Puck"}
+                        }
+                    }
                 )
-                script = response.text
                 
-                st.write("🔊 บันทึกเสียง...")
-                asyncio.run(make_audio(script))
-                status.update(label="เสร็จแล้ว!", state="complete")
+                final_script = response.text
+                
+                st.write("🔊 กำลังบันทึกไฟล์เสียง...")
+                # บันทึกเสียงที่ได้จาก AI โดยตรงเป็นไฟล์ mp3
+                with open("quiet_lens_podcast.mp3", "wb") as f:
+                    f.write(response.audio_bytes)
+                    
+                status.update(label="ตกผลึกเสร็จสมบูรณ์!", state="complete")
 
-            st.markdown(f'<div class="notebook-container"><div class="quote-text">{script}</div></div>', unsafe_allow_html=True)
-            st.audio("podcast.mp3")
+            # --- การแสดงผลผลลัพธ์ ---
+            st.markdown(f'<div class="notebook-container"><div class="quote-text">{final_script}</div></div>', unsafe_allow_html=True)
+            
+            # เล่นเสียงที่ AI สร้างออกมาเองโดยตรง (จะมีความธรรมชาติสูงมาก)
+            st.audio("quiet_lens_podcast.mp3")
+            
         except Exception as e:
             st.error(f"เกิดข้อผิดพลาด: {e}")
+            if "404" in str(e):
+                st.warning("ดูเหมือน API Key ของคุณยังไม่ได้รับสิทธิ์ให้ใช้โมเดล Native Audio ในโปรเจกต์นี้ครับ ลองสร้าง API Key ใหม่ในโปรเจกต์ใหม่ดูนะครับ")
+
 elif not api_key:
-    st.info("กรุณากรอก API Key ที่แถบด้านข้างเพื่อเริ่มต้นครับ")
+    st.info("เริ่มต้นโดยการกรอก API Key ที่แถบด้านข้างเพื่อเปิดใช้งานระบบครับ")
