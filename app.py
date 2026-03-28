@@ -5,7 +5,7 @@ import edge_tts
 import asyncio
 import os
 
-# --- 1. ตั้งค่าหน้าตาแอป ---
+# --- 1. ตั้งค่าหน้าตาแอป (Minimalist Style) ---
 st.set_page_config(page_title="Minimalist Insight", page_icon="📖", layout="centered")
 
 st.markdown("""
@@ -39,46 +39,57 @@ async def text_to_speech(text, output_filename="podcast_audio.mp3"):
     communicate = edge_tts.Communicate(text, "th-TH-PremwadeeNeural")
     await communicate.save(output_filename)
 
-# --- 3. ส่วนหลักของแอป ---
+# --- 3. ส่วนควบคุมด้านข้าง (Sidebar) ---
+with st.sidebar:
+    st.markdown("### 🔑 การตั้งค่ากุญแจ")
+    # ช่องเติม API Key (จะซ่อนตัวอักษรไว้เป็นความลับ)
+    user_api_key = st.text_input("กรอก Gemini API Key ของคุณ:", type="password", help="รับกุญแจได้ที่ aistudio.google.com")
+    
+    # ดึงจาก Secrets เป็นตัวสำรอง (ถ้ามี)
+    secret_api_key = st.secrets.get("GEMINI_API_KEY")
+    
+    # เลือกใช้ Key จากช่องกรอกก่อน ถ้าไม่มีค่อยไปดูใน Secrets
+    api_key = user_api_key if user_api_key else secret_api_key
+    
+    if api_key:
+        st.success("พร้อมใช้งาน (API Key Loaded)")
+    else:
+        st.warning("กรุณากรอก API Key เพื่อเริ่มใช้งาน")
+
+# --- 4. หน้าหลักของแอป ---
 st.title("Reflective Storyteller 📖")
 st.subheader("เปลี่ยนหน้ากระดาษให้เป็นเสียงนำทางใจ")
-
-# ดึง API Key จาก Secrets
-api_key = st.secrets.get("GEMINI_API_KEY")
 
 uploaded_file = st.file_uploader("ลากไฟล์หนังสือของคุณมาวางที่นี่ (PDF หรือ TXT)", type=["pdf", "txt"])
 
 if uploaded_file is not None:
     if st.button("เริ่มการตกผลึกความคิด ✨"):
         if not api_key:
-            st.error("❌ ไม่พบ API Key ใน Secrets")
+            st.error("❌ ไม่พบ API Key! กรุณากรอกกุญแจที่แถบด้านข้างก่อนนะครับ")
         else:
             try:
-                # ตั้งค่า Gemini
+                # ตั้งค่า Gemini ด้วยกุญแจที่ได้รับ
                 genai.configure(api_key=api_key)
                 
                 with st.status("🚀 กำลังดำเนินการ...", expanded=True) as status:
                     # ขั้นตอนที่ 1: อ่านเนื้อหา
                     raw_text = extract_text_from_file(uploaded_file)
                     if not raw_text.strip():
-                        st.error("ไฟล์ว่างเปล่าครับ")
+                        st.error("ไฟล์นี้ไม่มีข้อความที่อ่านได้ครับ")
                         st.stop()
 
                     # ขั้นตอนที่ 2: สรุปด้วย AI
                     st.write("🧠 AI กำลังกลั่นกรองหัวใจสำคัญ...")
-                    prompt_text = f"คุณคือ Agent สรุปเนื้อหานี้ให้เป็นพอดแคสต์ที่อบอุ่น: {raw_text[:8000]}"
+                    prompt_text = f"คุณคือ Agent สรุปเนื้อหานี้ให้เป็นบทพอดแคสต์ที่อบอุ่นและสร้างแรงบันดาลใจ: {raw_text[:10000]}"
                     
-                    # ลองเรียก Flash ก่อน ถ้าไม่ได้จะสลับไป Pro (แก้ปัญหา 404)
                     try:
+                        # ลองใช้ 1.5-flash ก่อน
                         model = genai.GenerativeModel('gemini-1.5-flash')
                         response = model.generate_content(prompt_text)
                     except:
-                        try:
-                            model = genai.GenerativeModel('gemini-pro')
-                            response = model.generate_content(prompt_text)
-                        except Exception as ai_err:
-                            st.error(f"AI ทำงานไม่ได้: {ai_err}")
-                            st.stop()
+                        # ถ้าล้มเหลว (เช่น 404) ให้ถอยไปใช้ pro
+                        model = genai.GenerativeModel('gemini-pro')
+                        response = model.generate_content(prompt_text)
                     
                     final_script = response.text
                     
@@ -87,15 +98,15 @@ if uploaded_file is not None:
                     asyncio.run(text_to_speech(final_script))
                     status.update(label="✨ เสร็จสมบูรณ์!", state="complete")
 
-                # แสดงผล
+                # แสดงผลลัพธ์
                 st.markdown(f'<div class="notebook-container"><div class="quote-text">{final_script}</div></div>', unsafe_allow_html=True)
                 st.audio("podcast_audio.mp3")
+                st.download_button("💾 ดาวน์โหลดไฟล์เสียง", open("podcast_audio.mp3", "rb"), file_name="podcast.mp3")
                 
             except Exception as e:
-                st.error(f"เกิดข้อผิดพลาดภาพรวม: {e}")
-
+                st.error(f"เกิดข้อผิดพลาด: {e}")
 else:
-    st.info("กรุณาลากไฟล์มาวางเพื่อเริ่มงานครับ")
+    st.info("เริ่มต้นโดยการลากไฟล์มาวาง และตรวจสอบ API Key ที่แถบด้านข้างครับ")
 
 st.markdown("---")
 st.caption("“Minimalist Insight” - พัฒนาแอปโดยคุณ Jabu")
