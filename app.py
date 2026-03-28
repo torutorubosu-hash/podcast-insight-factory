@@ -75,7 +75,7 @@ if file and api_key:
                 
                 # เรียกใช้โมเดลผ่าน SDK ใหม่ (ระบุชื่อสั้นๆ ได้เลย)
                 response = client.models.generate_content(
-                    model='gemini-1.5-flash',
+                    model='gemini-2.5-flash',
                     contents=prompt
                 )
                 script = response.text
