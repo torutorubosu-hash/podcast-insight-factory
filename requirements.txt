@@ -1,4 +1,4 @@
 streamlit
 google-genai
+google-cloud-texttospeech
 pdfplumber
-
