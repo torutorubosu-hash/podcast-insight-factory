@@ -62,7 +62,7 @@ if uploaded_file is not None:
                 # ตั้งค่า Gemini
                 genai.configure(api_key=api_key)
                 
-                with st.status("🚀 กำลังสร้างพอดแคสต์สไตล์นิ้วกลม...", expanded=True) as status:
+                with st.status("🚀 กำลังสร้างพอดแคสต์...", expanded=True) as status:
                     # ขั้นตอนที่ 1: อ่านเนื้อหา
                     st.write("📖 กำลังอ่านเนื้อหาจากไฟล์...")
                     raw_text = extract_text_from_file(uploaded_file)
@@ -74,22 +74,28 @@ if uploaded_file is not None:
                     # ขั้นตอนที่ 2: สรุปด้วย AI (นิยาม prompt ไว้ตรงนี้เลย)
                     st.write("🧠 AI กำลังกลั่นกรองหัวใจสำคัญ...")
                     prompt_text = f"""
-                    คุณคือ 'Niwgom Agent' นักเล่าเรื่องที่อบอุ่นและช่างสังเกต
-                    จงสรุปเนื้อหาที่ได้รับ ให้เป็นบทพอดแคสต์สั้นๆ 1-2 นาที
+                    คุณคือนักเล่าเรื่องที่อบอุ่นและช่างสังเกต
+                    จงสรุปเนื้อหาที่ได้รับ ให้เป็นบทพอดแคสต์ที่มีรายละเอียดและการยกตัวอย่างให้เชื่อมโยงกับชีวิตจริง
                     โทน: นุ่มนวล, ให้กำลังใจ, มีความหวัง, เชื่อมโยงเรื่องราวเข้ากับชีวิตจริง
                     เนื้อหา: {raw_text[:10000]}
                     (สรุปเป็นภาษาไทยที่ไพเราะ เริ่มต้นด้วยการทักทายที่ทำให้คนฟังรู้สึกสบายใจ)
                     """
                     
-                    # ใช้โมเดล 1.5-flash (ถ้าล้มเหลวจะถอยไป pro)
-                    try:
-                        model = genai.GenerativeModel('gemini-1.5-flash')
-                        response = model.generate_content(prompt_text)
-                    except:
-                        model = genai.GenerativeModel('gemini-pro')
-                        response = model.generate_content(prompt_text)
-                    
-                    final_script = response.text
+                
+try:
+    # 1. นิยาม prompt
+    prompt_text = f"คุณคือAgentสรุปเนื้อหานี้ให้เป็นพอดแคสต์ที่อบอุ่น: {raw_text[:8000]}"
+    
+    # 2. เรียกใช้โมเดล (ลองใส่ 'models/' นำหน้าชื่อ)
+    # เราจะลองเรียก Flash ก่อน ถ้าไม่ได้ค่อยถอยไป Pro
+    try:
+        model = genai.GenerativeModel(model_name='models/gemini-1.5-flash') # <--- ใส่ models/ นำหน้า
+        response = model.generate_content(prompt_text)
+    except:
+        model = genai.GenerativeModel(model_name='models/gemini-pro') # <--- ใส่ models/ นำหน้า
+        response = model.generate_content(prompt_text)
+        
+    final_script = response.text
                     
                     # ขั้นตอนที่ 3: ทำเสียง
                     st.write("🔊 กำลังบันทึกเสียงพอดแคสต์...")
